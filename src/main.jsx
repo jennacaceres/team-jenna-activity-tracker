@@ -400,9 +400,9 @@ function Dashboard({ onLogout }) {
       {error && <div className="error">{error}</div>}
 
       <section className="stat-grid">
+        <Stat icon={<Users/>} label="Total Agents" value={agents.length} />
         <Stat icon={<BarChart3/>} label="Total Points" value={totals.points} />
         <Stat icon={<CheckCircle/>} label="Closings" value={totals.closings} />
-        <Stat icon={<Users/>} label="Coded" value={totals.coded} />
         <Stat icon={<Award/>} label="Total Bonus" value={currency(totals.bonus)} />
       </section>
 
@@ -461,30 +461,69 @@ function Stat({ icon, label, value }) {
 
 function AgentCard({ agent, rank }) {
   const tier = getRewardTier(agent.productivity, agent.hasDiamondRequirement);
+  const displayTier = tier.lockedDiamond ? "Diamond Locked" : tier.label;
+  const levelClass = tier.lockedDiamond ? "locked" : tier.tier;
+  const progress = Math.min(agent.productivity, 150);
+  const totalReward = agent.totalBonus + tier.amount;
+
   return (
-    <article className="agent-card">
-      <div className="rank"><Trophy size={18}/> #{rank}</div>
-      <div>
-        <h3>{agent.agent}</h3>
-        <p className="muted">{agent.coachInsight}</p>
+    <article className={`agent-card level-${levelClass}`}>
+      <div className="agent-main">
+        <div className="rank-badge">#{rank}</div>
+        <div className="avatar-level">{getTierIcon(tier)}</div>
+        <div className="agent-info">
+          <h3>{agent.agent}</h3>
+          <div className="agent-sub">
+            <span className="type-pill">{agent.agentType || "Agent"}</span>
+            <span>{agent.entries} entries</span>
+            <span>avg {agent.entries ? Math.round(agent.totalPoints / agent.entries) : 0} pts</span>
+          </div>
+          <div className="progress-track">
+            <div className={`progress-fill level-${levelClass}`} style={{ width: `${Math.min(100, (progress / 150) * 100)}%` }} />
+          </div>
+          <p className="coach-line">{agent.coachInsight}</p>
+        </div>
+        <div className="score-block">
+          <strong>{agent.totalPoints}</strong>
+          <span>pts</span>
+          <em className={`level-chip level-${levelClass}`}>{getTierIcon(tier)} {displayTier} {agent.productivity.toFixed(0)}%</em>
+        </div>
       </div>
+
       <div className="agent-metrics">
-        <span>Points <strong>{agent.totalPoints}</strong></span>
-        <span>Productivity <strong>{agent.productivity.toFixed(0)}%</strong></span>
-        <span>Tier <strong>{tier.lockedDiamond ? "Diamond Locked / Gold" : tier.label}</strong></span>
-        <span>Reward <strong>{currency(tier.amount)}</strong></span>
+        <span>Weekly Reward <strong>{currency(tier.amount)}</strong></span>
         <span>Closing Bonus <strong>{currency(agent.closingBonus)}</strong></span>
         <span>Exam Bonus <strong>{currency(agent.examBonus)}</strong></span>
-        <span>Total Bonus <strong>{currency(agent.totalBonus + tier.amount)}</strong></span>
+        <span>Total Bonus <strong>{currency(totalReward)}</strong></span>
+        <span>Closings <strong>{agent.closedCases}</strong></span>
+        <span>Coded Recruits <strong>{agent.coded}</strong></span>
+        <span>Appointments <strong>{agent.appointments}</strong></span>
+        <span>Presentations <strong>{agent.presentation}</strong></span>
       </div>
+
+      {tier.lockedDiamond && (
+        <div className="diamond-warning">
+          💎 Diamond Locked: needs at least 1 Closing OR 1 Recruit with MTM + Paid Exam.
+        </div>
+      )}
+
       <details>
         <summary>Activity Breakdown</summary>
         <div className="breakdown">
-          {Object.entries(agent.breakdown).map(([key, value]) => <span key={key}>{labelize(key)}: <strong>{value}</strong></span>)}
+          {Object.entries(agent.rawTotals).map(([key, value]) => <span key={key}>{labelize(key)}: <strong>{value}</strong></span>)}
         </div>
       </details>
     </article>
   );
+}
+
+function getTierIcon(tier) {
+  if (tier.lockedDiamond) return "🔒";
+  if (tier.tier === "diamond") return "💎";
+  if (tier.tier === "gold") return "🥇";
+  if (tier.tier === "silver") return "🥈";
+  if (tier.tier === "bronze") return "🥉";
+  return "⚪";
 }
 
 function aggregateByAgent(rows) {
@@ -505,10 +544,28 @@ function aggregateByAgent(rows) {
         closingBonus: 0,
         examBonus: 0,
         totalBonus: 0,
+        agentType: row.agentType || "Agent",
+        entries: 0,
         breakdown: {},
+        rawTotals: {
+          approaches: 0,
+          appointments: 0,
+          presentation: 0,
+          bybTableTop: 0,
+          meetTheManager: 0,
+          paidExam: 0,
+          coded: 0,
+          recruitment: 0,
+          closedCases: 0,
+          training: 0,
+          branding: 0,
+          teamEngagement: 0,
+        },
       });
     }
     const a = map.get(name);
+    a.entries += 1;
+    a.agentType = row.agentType || a.agentType || "Agent";
     a.totalPoints += Number(row.totalPoints || 0);
     a.closedCases += Number(row.closedCases || 0);
     a.coded += Number(row.coded || 0);
@@ -520,6 +577,9 @@ function aggregateByAgent(rows) {
     a.closingBonus += Number(row.bonuses?.closingBonus || 0);
     a.examBonus += Number(row.bonuses?.examBonus || 0);
     a.totalBonus += Number(row.bonuses?.totalBonus || 0);
+    for (const key of Object.keys(a.rawTotals)) {
+      a.rawTotals[key] += Number(row[key] || 0);
+    }
     for (const [k, v] of Object.entries(row.pointsBreakdown || {})) {
       a.breakdown[k] = (a.breakdown[k] || 0) + Number(v || 0);
     }
