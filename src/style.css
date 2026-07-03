@@ -19,3 +19,6 @@
 .agent-card.level-bronze{border-color:#cd7f3266}.agent-card.level-silver{border-color:#c0c0c066}.agent-card.level-gold{border-color:#facc1566}.agent-card.level-diamond{border-color:#a78bfa99;box-shadow:0 0 28px rgba(167,139,250,.18)}.agent-card.level-locked{border-color:#f9731666}
 .diamond-warning{background:rgba(249,115,22,.13);border:1px solid rgba(249,115,22,.35);color:#fed7aa;padding:10px 12px;border-radius:14px;font-weight:800}
 @media(max-width:850px){.agent-main{grid-template-columns:42px 52px 1fr}.score-block{grid-column:1/-1;text-align:left}.agent-sub{font-size:12px}}
+
+/* V7 July 3 launch */
+.toolbar select{min-width:260px}

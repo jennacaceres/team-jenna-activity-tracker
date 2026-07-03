@@ -24,8 +24,10 @@ import {
   calculatePoints,
   currency,
   getMonthKey,
+  getCompetitionWeek,
   getProductivity,
   getRewardTier,
+  getNextLevelProgress,
   getWeekKey
 } from "./points";
 import "./style.css";
@@ -185,6 +187,7 @@ function AgentForm() {
         brandingCounted: points.brandingCounted,
         bonuses,
         weekKey: getWeekKey(form.date),
+        competitionWeek: getCompetitionWeek(form.date),
         monthKey: getMonthKey(form.date),
       };
       await saveActivity(payload);
@@ -328,7 +331,7 @@ function AdminPage() {
 function Dashboard({ onLogout }) {
   const [activities, setActivities] = useState([]);
   const [search, setSearch] = useState("");
-  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
+  const [weekKey, setWeekKey] = useState(getCompetitionWeek(new Date().toISOString().slice(0, 10)).key);
   const [tab, setTab] = useState("points");
   const [error, setError] = useState("");
 
@@ -341,11 +344,24 @@ function Dashboard({ onLogout }) {
 
   const filtered = useMemo(() => {
     return activities.filter((a) => {
-      const matchesMonth = !period || (a.date || "").startsWith(period);
+      const matchesWeek = !weekKey || getCompetitionWeek(a.date).key === weekKey;
       const matchesSearch = !search || (a.agent || "").toLowerCase().includes(search.toLowerCase());
-      return matchesMonth && matchesSearch;
+      return matchesWeek && matchesSearch;
     });
-  }, [activities, period, search]);
+  }, [activities, weekKey, search]);
+
+  const availableWeeks = useMemo(() => {
+    const weeks = new Map();
+    const todayWeek = getCompetitionWeek(new Date().toISOString().slice(0, 10));
+    weeks.set(todayWeek.key, todayWeek);
+    activities.forEach((a) => {
+      const w = getCompetitionWeek(a.date);
+      weeks.set(w.key, w);
+    });
+    return [...weeks.values()].filter((w) => w.number >= 1).sort((a, b) => b.number - a.number);
+  }, [activities]);
+
+  const selectedWeek = useMemo(() => availableWeeks.find((w) => w.key === weekKey) || getCompetitionWeek(new Date().toISOString().slice(0, 10)), [availableWeeks, weekKey]);
 
   const agents = useMemo(() => aggregateByAgent(filtered), [filtered]);
   const ranked = useMemo(() => {
@@ -381,7 +397,7 @@ function Dashboard({ onLogout }) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `team-jenna-${period || "report"}.csv`;
+    link.download = `team-jenna-${weekKey || "report"}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -392,7 +408,7 @@ function Dashboard({ onLogout }) {
         <div>
           <p className="eyebrow">Private Manager View</p>
           <h2>Dashboard</h2>
-          <p className="muted">Realtime Firestore summary, rankings, productivity, and bonuses.</p>
+          <p className="muted">Weekly levels: Bronze 300 pts • Silver 500 pts • Gold 1,000 pts • Diamond 1,500 pts + closing or converted recruit.</p>
         </div>
         <button onClick={onLogout}><LogOut size={16}/> Logout</button>
       </section>
@@ -407,7 +423,11 @@ function Dashboard({ onLogout }) {
       </section>
 
       <section className="toolbar">
-        <label><CalendarDays size={16}/> Month<input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} /></label>
+        <label><CalendarDays size={16}/> Week
+          <select value={weekKey} onChange={(e) => setWeekKey(e.target.value)}>
+            {availableWeeks.map((w) => <option key={w.key} value={w.key}>{w.label}: {w.dateRange}</option>)}
+          </select>
+        </label>
         <label><Search size={16}/> Search<input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Agent name" /></label>
         <button onClick={exportCsv}><Download size={16}/> Export CSV</button>
       </section>
@@ -429,7 +449,7 @@ function Dashboard({ onLogout }) {
       </section>
 
       <section className="panel">
-        <h3>Activity History</h3>
+        <h3>Activity History — {selectedWeek.label}</h3>
         <div className="table-wrap">
           <table>
             <thead><tr><th>Date</th><th>Agent</th><th>Points</th><th>Closed</th><th>Coded</th><th>Bonus</th><th>Action</th></tr></thead>
@@ -460,10 +480,10 @@ function Stat({ icon, label, value }) {
 }
 
 function AgentCard({ agent, rank }) {
-  const tier = getRewardTier(agent.productivity, agent.hasDiamondRequirement);
+  const tier = getRewardTier(agent.totalPoints, agent.hasDiamondRequirement);
+  const progressInfo = getNextLevelProgress(agent.totalPoints);
   const displayTier = tier.lockedDiamond ? "Diamond Locked" : tier.label;
   const levelClass = tier.lockedDiamond ? "locked" : tier.tier;
-  const progress = Math.min(agent.productivity, 150);
   const totalReward = agent.totalBonus + tier.amount;
 
   return (
@@ -479,14 +499,14 @@ function AgentCard({ agent, rank }) {
             <span>avg {agent.entries ? Math.round(agent.totalPoints / agent.entries) : 0} pts</span>
           </div>
           <div className="progress-track">
-            <div className={`progress-fill level-${levelClass}`} style={{ width: `${Math.min(100, (progress / 150) * 100)}%` }} />
+            <div className={`progress-fill level-${levelClass}`} style={{ width: `${Math.min(100, progressInfo.percent)}%` }} />
           </div>
-          <p className="coach-line">{agent.coachInsight}</p>
+          <p className="coach-line">{progressInfo.label} • {progressInfo?.label ? `${progressInfo.label} • ${agent.coachInsight}` : agent.coachInsight}</p>
         </div>
         <div className="score-block">
           <strong>{agent.totalPoints}</strong>
           <span>pts</span>
-          <em className={`level-chip level-${levelClass}`}>{getTierIcon(tier)} {displayTier} {agent.productivity.toFixed(0)}%</em>
+          <em className={`level-chip level-${levelClass}`}>{getTierIcon(tier)} {displayTier}</em>
         </div>
       </div>
 
@@ -503,7 +523,7 @@ function AgentCard({ agent, rank }) {
 
       {tier.lockedDiamond && (
         <div className="diamond-warning">
-          💎 Diamond Locked: needs at least 1 Closing OR 1 Recruit with MTM + Paid Exam.
+          💎 Diamond Locked: needs at least 1 Closing OR 1 converted recruit with MTM + Paid Exam.
         </div>
       )}
 
@@ -603,7 +623,7 @@ function getCoachInsight(a) {
   if (a.approaches >= 30 && a.appointments <= 2) return "Needs help converting approaches to appointments";
   if (a.presentation >= 5 && a.closedCases === 0) return "Needs closing support";
   if (a.meetTheManager >= 2 || a.paidExam >= 2 || a.coded >= 1) return "Recruitment-focused";
-  if (getProductivity(a.totalPoints) >= 100) return "Top performer";
+  if (a.totalPoints >= 1000) return "Top performer";
   return "Active — continue monitoring pipeline";
 }
 

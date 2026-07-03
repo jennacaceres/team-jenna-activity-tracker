@@ -16,13 +16,82 @@ export const POINT_VALUES = {
 export const BRANDING_MAX_PER_DAY = 3;
 export const WEEKLY_TARGET = 500;
 
-export const REWARD_TIERS = [
-  { tier: "none", label: "No Reward", amount: 0, minPercent: 0, maxPercent: 29 },
-  { tier: "bronze", label: "Bronze", amount: 100, minPercent: 30, maxPercent: 50 },
-  { tier: "silver", label: "Silver", amount: 200, minPercent: 51, maxPercent: 70 },
-  { tier: "gold", label: "Gold", amount: 300, minPercent: 71, maxPercent: 149 },
-  { tier: "diamond", label: "Diamond", amount: 500, minPercent: 150, maxPercent: null },
+export const COMPETITION_START_DATE = "2026-07-03";
+
+function toLocalDate(dateString) {
+  return new Date(`${dateString}T00:00:00`);
+}
+
+function formatDateLabel(date) {
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+export function getCompetitionWeek(dateString) {
+  const current = toLocalDate(dateString || new Date().toISOString().slice(0, 10));
+  const launch = toLocalDate(COMPETITION_START_DATE);
+
+  if (current < launch) {
+    return {
+      key: "pre-launch",
+      number: 0,
+      label: "Pre-Launch",
+      startDate: "",
+      endDate: "",
+      dateRange: "Before Jul 3, 2026",
+    };
+  }
+
+  const firstWeekEnd = toLocalDate("2026-07-05");
+  if (current <= firstWeekEnd) {
+    return {
+      key: "week-1",
+      number: 1,
+      label: "Week 1",
+      startDate: "2026-07-03",
+      endDate: "2026-07-05",
+      dateRange: "Jul 3 – Jul 5, 2026",
+    };
+  }
+
+  // Week 2 starts Monday, July 6, 2026. After that, weeks run Monday to Sunday.
+  const week2Start = toLocalDate("2026-07-06");
+  const diffDays = Math.floor((current - week2Start) / 86400000);
+  const weekIndex = Math.floor(diffDays / 7);
+  const weekNumber = 2 + weekIndex;
+
+  const start = new Date(week2Start);
+  start.setDate(week2Start.getDate() + weekIndex * 7);
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+
+  const startIso = start.toISOString().slice(0, 10);
+  const endIso = end.toISOString().slice(0, 10);
+
+  return {
+    key: `week-${weekNumber}`,
+    number: weekNumber,
+    label: `Week ${weekNumber}`,
+    startDate: startIso,
+    endDate: endIso,
+    dateRange: `${formatDateLabel(start)} – ${formatDateLabel(end)}`,
+  };
+}
+
+export function isDateInCompetitionWeek(dateString, weekKey) {
+  return getCompetitionWeek(dateString).key === weekKey;
+}
+
+
+export const WEEKLY_LEVELS = [
+  { tier: "none", label: "No Level", amount: 0, minPoints: 0, maxPoints: 299 },
+  { tier: "bronze", label: "Bronze", amount: 100, minPoints: 300, maxPoints: 499 },
+  { tier: "silver", label: "Silver", amount: 200, minPoints: 500, maxPoints: 999 },
+  { tier: "gold", label: "Gold", amount: 300, minPoints: 1000, maxPoints: 1499 },
+  { tier: "diamond", label: "Diamond", amount: 500, minPoints: 1500, maxPoints: null },
 ];
+
+export const REWARD_TIERS = WEEKLY_LEVELS;
 
 export function getClosedCaseBonus(apeAmount) {
   const ape = Number(apeAmount || 0);
@@ -75,21 +144,28 @@ export function getProductivity(weeklyPoints) {
   return (Number(weeklyPoints || 0) / WEEKLY_TARGET) * 100;
 }
 
-export function getRewardTier(productivityPercent, hasDiamondRequirement = true) {
-  if (productivityPercent >= 150 && hasDiamondRequirement) return REWARD_TIERS[4];
-  if (productivityPercent >= 150 && !hasDiamondRequirement) return { ...REWARD_TIERS[3], lockedDiamond: true };
-  if (productivityPercent >= 71) return REWARD_TIERS[3];
-  if (productivityPercent >= 51) return REWARD_TIERS[2];
-  if (productivityPercent >= 30) return REWARD_TIERS[1];
-  return REWARD_TIERS[0];
+export function getRewardTier(weeklyPoints, hasDiamondRequirement = true) {
+  const points = Number(weeklyPoints || 0);
+
+  if (points >= 1500 && hasDiamondRequirement) return WEEKLY_LEVELS[4];
+  if (points >= 1500 && !hasDiamondRequirement) return { ...WEEKLY_LEVELS[3], lockedDiamond: true };
+  if (points >= 1000) return WEEKLY_LEVELS[3];
+  if (points >= 500) return WEEKLY_LEVELS[2];
+  if (points >= 300) return WEEKLY_LEVELS[1];
+  return WEEKLY_LEVELS[0];
+}
+
+export function getNextLevelProgress(weeklyPoints) {
+  const points = Number(weeklyPoints || 0);
+  if (points >= 1500) return { current: points, target: 1500, percent: 100, label: "Diamond reached" };
+  if (points >= 1000) return { current: points, target: 1500, percent: (points / 1500) * 100, label: "Next: Diamond at 1,500 pts" };
+  if (points >= 500) return { current: points, target: 1000, percent: (points / 1000) * 100, label: "Next: Gold at 1,000 pts" };
+  if (points >= 300) return { current: points, target: 500, percent: (points / 500) * 100, label: "Next: Silver at 500 pts" };
+  return { current: points, target: 300, percent: (points / 300) * 100, label: "Next: Bronze at 300 pts" };
 }
 
 export function getWeekKey(dateString) {
-  const date = new Date(dateString + "T00:00:00");
-  const first = new Date(date.getFullYear(), 0, 1);
-  const days = Math.floor((date - first) / 86400000);
-  const week = Math.ceil((days + first.getDay() + 1) / 7);
-  return `${date.getFullYear()}-W${String(week).padStart(2, "0")}`;
+  return getCompetitionWeek(dateString).key;
 }
 
 export function getMonthKey(dateString) {
