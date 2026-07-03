@@ -1,25 +1,38 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
-import { db } from "./firebase";
-import { calculatePoints, getClosedCaseBonus, getPaidExamBonus, getProductivity, getRewardTier, WEEKLY_TARGET } from "./points";
+import {
+  Award,
+  BarChart3,
+  CalendarDays,
+  CheckCircle,
+  Download,
+  Lock,
+  LogOut,
+  Minus,
+  Plus,
+  Search,
+  Trash2,
+  Trophy,
+  Users
+} from "lucide-react";
+import { saveActivity, subscribeActivities, removeActivity, editActivity } from "./firebase";
+import {
+  BRANDING_MAX_PER_DAY,
+  POINT_VALUES,
+  WEEKLY_TARGET,
+  calculateBonuses,
+  calculatePoints,
+  currency,
+  getMonthKey,
+  getProductivity,
+  getRewardTier,
+  getWeekKey
+} from "./points";
 import "./style.css";
 
-const ACTIVITIES = [
-  ["approaches", "Approaches"],
-  ["appointments", "Appointments Set"],
-  ["presentation", "Financial Planning / Presentation"],
-  ["bybTableTop", "BYB / Table Top"],
-  ["closedCases", "Closed Cases"],
-  ["meetTheManager", "Meet The Manager"],
-  ["paidExam", "Paid Exam"],
-  ["coded", "Coded Recruits"],
-  ["branding", "Branding Posts (max 3 pts/day)"],
-  ["training", "Training"],
-  ["teamEngagement", "Team Engagement"],
-];
+const MANAGER_PIN = import.meta.env.VITE_MANAGER_PIN || "123456";
 
-const emptyForm = {
+const initialForm = {
   date: new Date().toISOString().slice(0, 10),
   agent: "",
   agentType: "Agent",
@@ -27,127 +40,515 @@ const emptyForm = {
   appointments: 0,
   presentation: 0,
   bybTableTop: 0,
-  closedCases: 0,
-  recruitment: 0,
   meetTheManager: 0,
   paidExam: 0,
   coded: 0,
-  branding: 0,
+  closedCases: 0,
+  recruitment: 0,
   training: 0,
+  branding: 0,
   teamEngagement: 0,
-  apeAmount: 0,
-  paidExamType: "single",
   notes: "",
+  closingDetails: [],
+  examDetails: [],
 };
 
-function money(n) { return `₱${Number(n || 0).toLocaleString()}`; }
-function num(n) { return Number(n || 0).toLocaleString(); }
-function startOfWeek(date = new Date()) { const d = new Date(date); const day = (d.getDay() + 6) % 7; d.setDate(d.getDate() - day); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); }
-function startOfMonth(date = new Date()) { return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().slice(0,10); }
+const activityRows = [
+  ["approaches", "Approaches", "Every prospect approached"],
+  ["appointments", "Appointments / BYB Invite", "Booked appointment or invite"],
+  ["presentation", "Presentation", "Financial planning or plan presentation"],
+  ["bybTableTop", "BYB / Table Top", "Business presentation"],
+  ["meetTheManager", "Meet the Manager", "Recruit attended MTM"],
+  ["paidExam", "Paid Exam", "Single/Dual popup"],
+  ["coded", "Coded", "Licensed / coded recruit"],
+  ["closedCases", "Closed Case", "APE popup required"],
+  ["training", "Training", "Approved trainings"],
+  ["branding", `Branding (max ${BRANDING_MAX_PER_DAY}/day)`, "Posting / personal branding"],
+  ["teamEngagement", "Team Engagement", "GC / team activity participation"],
+];
 
-function Home() {
-  return <main className="hero">
-    <div className="brand"><div className="logo">TJ</div><h1>TEAM JENNA ACTIVITY HUB</h1><p>Simple activity tracking for agents and manager dashboard.</p></div>
-    <div className="cards">
-      <a className="card red" href="#/form"><h2>Agent Activity Form</h2><p>Submit daily activities, points, sales, and recruitment.</p></a>
-      <a className="card blue" href="#/admin"><h2>Manager Dashboard</h2><p>PIN protected summary, rankings, bonuses, and history.</p></a>
+function App() {
+  const [page, setPage] = useState(location.pathname.includes("admin") ? "admin" : "form");
+  useEffect(() => {
+    const onPop = () => setPage(location.pathname.includes("admin") ? "admin" : "form");
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  function nav(next) {
+    history.pushState({}, "", next === "admin" ? "/admin" : "/");
+    setPage(next);
+  }
+
+  return (
+    <>
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">Team Jenna</p>
+          <h1>Activity Tracker</h1>
+        </div>
+        <nav>
+          <button onClick={() => nav("form")} className={page === "form" ? "active" : ""}>Agent Form</button>
+          <button onClick={() => nav("admin")} className={page === "admin" ? "active" : ""}>Manager Dashboard</button>
+        </nav>
+      </header>
+      {page === "admin" ? <AdminPage /> : <AgentForm />}
+    </>
+  );
+}
+
+function CounterRow({ id, label, help, value, onDec, onInc }) {
+  return (
+    <div className="counter-row">
+      <div>
+        <div className="row-title">{label}</div>
+        <div className="row-help">{help}</div>
+        <span className="badge">{POINT_VALUES[id] ?? 0} pt{(POINT_VALUES[id] ?? 0) === 1 ? "" : "s"}</span>
+      </div>
+      <div className="counter-controls">
+        <button type="button" onClick={onDec} className="round"><Minus size={16} /></button>
+        <strong>{value}</strong>
+        <button type="button" onClick={onInc} className="round plus"><Plus size={16} /></button>
+      </div>
     </div>
-  </main>
+  );
 }
 
 function AgentForm() {
-  const [form, setForm] = useState(emptyForm);
-  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState(initialForm);
   const [message, setMessage] = useState("");
-  const points = calculatePoints(form);
-  const closedBonus = Number(form.closedCases || 0) * getClosedCaseBonus(form.apeAmount);
-  const examBonus = Number(form.paidExam || 0) * getPaidExamBonus(form.paidExamType);
+  const [closedModal, setClosedModal] = useState(false);
+  const [examModal, setExamModal] = useState(false);
+  const [apeInput, setApeInput] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const change = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const points = useMemo(() => calculatePoints(form), [form]);
+  const bonuses = useMemo(() => calculateBonuses(form), [form]);
+
+  function setField(key, value) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function increment(key) {
+    if (key === "closedCases") {
+      setApeInput("");
+      setClosedModal(true);
+      return;
+    }
+    if (key === "paidExam") {
+      setExamModal(true);
+      return;
+    }
+    setForm((prev) => ({ ...prev, [key]: Number(prev[key] || 0) + 1 }));
+  }
+
+  function decrement(key) {
+    setForm((prev) => {
+      const next = { ...prev, [key]: Math.max(0, Number(prev[key] || 0) - 1) };
+      if (key === "closedCases") next.closingDetails = (prev.closingDetails || []).slice(0, -1);
+      if (key === "paidExam") next.examDetails = (prev.examDetails || []).slice(0, -1);
+      return next;
+    });
+  }
+
+  function saveClosing() {
+    const ape = Number(apeInput || 0);
+    if (!ape || ape < 0) return alert("Please enter a valid APE amount.");
+    setForm((prev) => ({
+      ...prev,
+      closedCases: Number(prev.closedCases || 0) + 1,
+      closingDetails: [...(prev.closingDetails || []), { apeAmount: ape }],
+    }));
+    setClosedModal(false);
+  }
+
+  function saveExam(type) {
+    setForm((prev) => ({
+      ...prev,
+      paidExam: Number(prev.paidExam || 0) + 1,
+      examDetails: [...(prev.examDetails || []), { type }],
+    }));
+    setExamModal(false);
+  }
 
   async function submit(e) {
     e.preventDefault();
-    if (!form.agent.trim()) return setMessage("Please enter agent name.");
-    setSaving(true); setMessage("");
-    const computed = calculatePoints(form);
-    const payload = {
-      ...form,
-      agent: form.agent.trim(),
-      apeAmount: Number(form.apeAmount || 0),
-      closedBonus: Number(form.closedCases || 0) * getClosedCaseBonus(form.apeAmount),
-      paidExamBonus: Number(form.paidExam || 0) * getPaidExamBonus(form.paidExamType),
-      points: computed.total,
-      breakdown: computed.breakdown,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-    await addDoc(collection(db, "activities"), payload);
-    setMessage(`Submitted successfully! Total points: ${computed.total}`);
-    setForm({ ...emptyForm, agent: form.agent, agentType: form.agentType });
-    setSaving(false);
+    if (!form.agent.trim()) return alert("Please enter agent name.");
+    setSaving(true);
+    setMessage("");
+    try {
+      const payload = {
+        ...form,
+        agent: form.agent.trim(),
+        pointsBreakdown: points.breakdown,
+        totalPoints: points.total,
+        brandingCounted: points.brandingCounted,
+        bonuses,
+        weekKey: getWeekKey(form.date),
+        monthKey: getMonthKey(form.date),
+      };
+      await saveActivity(payload);
+      setMessage(`✅ Activity saved! ${points.total} points. Bonus: ${currency(bonuses.totalBonus)}.`);
+      setForm({ ...initialForm, date: new Date().toISOString().slice(0, 10) });
+    } catch (error) {
+      console.error(error);
+      alert("Saving failed. Please check Firebase environment variables and Firestore rules.");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  return <main className="page"><Nav/><section className="panel">
-    <h1>Agent Activity Form</h1><p className="muted">Encode your daily activities. Points and bonuses compute automatically.</p>
-    <form onSubmit={submit} className="form">
-      <div className="grid"><label>Agent Name<input value={form.agent} onChange={e=>change("agent", e.target.value)} placeholder="Your name" /></label><label>Date<input type="date" value={form.date} onChange={e=>change("date", e.target.value)} /></label><label>Agent Type<select value={form.agentType} onChange={e=>change("agentType", e.target.value)}><option>Agent</option><option>Rookie</option><option>AUM</option><option>UM</option></select></label></div>
-      <h3>Activities</h3><div className="grid activities">{ACTIVITIES.map(([key,label]) => <label key={key}>{label}<input type="number" min="0" value={form[key]} onChange={e=>change(key, Number(e.target.value))}/></label>)}</div>
-      <h3>Bonus Fields</h3><div className="grid"><label>Total APE Amount for Closed Case/s<input type="number" min="0" value={form.apeAmount} onChange={e=>change("apeAmount", Number(e.target.value))}/></label><label>Paid Exam Type<select value={form.paidExamType} onChange={e=>change("paidExamType", e.target.value)}><option value="single">Single</option><option value="dual">Dual</option></select></label></div>
-      <label>Notes<textarea value={form.notes} onChange={e=>change("notes", e.target.value)} placeholder="Optional notes" /></label>
-      <div className="summaryBox"><b>Total Points: {points.total}</b><span>Closed Case Bonus: {money(closedBonus)}</span><span>Paid Exam Bonus: {money(examBonus)}</span></div>
-      <button className="primary" disabled={saving}>{saving ? "Submitting..." : "Submit Activity"}</button>{message && <p className="msg">{message}</p>}
-    </form>
-  </section></main>
+  return (
+    <main className="page">
+      <section className="hero-card">
+        <p className="eyebrow">Public Agent Link</p>
+        <h2>Daily Activity Form</h2>
+        <p>Encode activities in less than 30 seconds. Points and bonuses update live.</p>
+      </section>
+
+      <form className="grid form-grid" onSubmit={submit}>
+        <section className="panel wide">
+          <div className="two-col">
+            <label>Agent Name<input value={form.agent} onChange={(e) => setField("agent", e.target.value)} placeholder="Type your name" /></label>
+            <label>Date<input type="date" value={form.date} onChange={(e) => setField("date", e.target.value)} /></label>
+          </div>
+          <label>Agent Type
+            <select value={form.agentType} onChange={(e) => setField("agentType", e.target.value)}>
+              <option>Agent</option>
+              <option>Rookie</option>
+              <option>AUM</option>
+              <option>Manager</option>
+            </select>
+          </label>
+
+          <div className="counter-list">
+            {activityRows.map(([id, label, help]) => (
+              <CounterRow
+                key={id}
+                id={id}
+                label={label}
+                help={help}
+                value={form[id]}
+                onDec={() => decrement(id)}
+                onInc={() => increment(id)}
+              />
+            ))}
+          </div>
+
+          <label>Notes<textarea value={form.notes} onChange={(e) => setField("notes", e.target.value)} placeholder="Optional notes" /></label>
+          <button className="primary full" disabled={saving}>{saving ? "Saving..." : "Submit Activity"}</button>
+          {message && <div className="success">{message}</div>}
+        </section>
+
+        <aside className="panel sticky">
+          <h3>Live Summary</h3>
+          <div className="big-number">{points.total}</div>
+          <p className="muted">Total Points</p>
+          <div className="summary-list">
+            <span>Branding counted</span><strong>{points.brandingCounted}/{BRANDING_MAX_PER_DAY}</strong>
+            <span>Closed bonus</span><strong>{currency(bonuses.closingBonus)}</strong>
+            <span>Exam bonus</span><strong>{currency(bonuses.examBonus)}</strong>
+            <span>Total bonus</span><strong>{currency(bonuses.totalBonus)}</strong>
+          </div>
+
+          {!!form.closingDetails.length && (
+            <div className="mini-box">
+              <strong>Closings</strong>
+              {form.closingDetails.map((c, i) => <p key={i}>Case {i+1}: {currency(c.apeAmount)}</p>)}
+            </div>
+          )}
+
+          {!!form.examDetails.length && (
+            <div className="mini-box">
+              <strong>Paid Exams</strong>
+              {form.examDetails.map((x, i) => <p key={i}>Exam {i+1}: {x.type === "dual" ? "Dual" : "Single"}</p>)}
+            </div>
+          )}
+        </aside>
+      </form>
+
+      {closedModal && (
+        <Modal title="Closed Case APE">
+          <label>How much APE did you close?
+            <input autoFocus type="number" value={apeInput} onChange={(e) => setApeInput(e.target.value)} placeholder="Example: 52000" />
+          </label>
+          <div className="modal-actions">
+            <button type="button" onClick={() => setClosedModal(false)}>Cancel</button>
+            <button type="button" className="primary" onClick={saveClosing}>Save Closing</button>
+          </div>
+        </Modal>
+      )}
+
+      {examModal && (
+        <Modal title="Paid Exam Type">
+          <p className="muted">Select the license paid by recruit.</p>
+          <div className="modal-actions vertical">
+            <button type="button" className="primary" onClick={() => saveExam("single")}>Single License — ₱200 bonus</button>
+            <button type="button" className="primary" onClick={() => saveExam("dual")}>Dual License — ₱300 bonus</button>
+            <button type="button" onClick={() => setExamModal(false)}>Cancel</button>
+          </div>
+        </Modal>
+      )}
+    </main>
+  );
 }
 
-function Nav(){ return <nav className="nav"><a href="#/">Home</a><a href="#/form">Agent Form</a><a href="#/admin">Manager</a></nav> }
+function Modal({ title, children }) {
+  return <div className="modal-backdrop"><div className="modal"><h3>{title}</h3>{children}</div></div>;
+}
 
-function AdminGate({children}) {
-  const [ok, setOk] = useState(sessionStorage.getItem("tj_admin") === "yes");
+function AdminPage() {
   const [pin, setPin] = useState("");
-  const managerPin = import.meta.env.VITE_MANAGER_PIN || "246810";
-  if (ok) return children;
-  return <main className="page"><Nav/><section className="panel small"><h1>Manager Access</h1><p className="muted">Enter manager PIN to view dashboard.</p><input className="pin" type="password" value={pin} onChange={e=>setPin(e.target.value)} placeholder="Manager PIN"/><button className="primary" onClick={()=>{ if(pin===managerPin){sessionStorage.setItem("tj_admin","yes"); setOk(true)} else alert("Invalid PIN")}}>Enter Dashboard</button></section></main>
+  const [authed, setAuthed] = useState(sessionStorage.getItem("managerAuthed") === "yes");
+
+  if (!authed) {
+    return (
+      <main className="page center">
+        <section className="panel login">
+          <Lock size={34} />
+          <h2>Manager Dashboard</h2>
+          <p className="muted">Enter manager PIN. Default PIN is 123456 unless changed in Vercel.</p>
+          <input type="password" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Manager PIN" />
+          <button className="primary full" onClick={() => {
+            if (pin === MANAGER_PIN) {
+              sessionStorage.setItem("managerAuthed", "yes");
+              setAuthed(true);
+            } else {
+              alert("Invalid PIN");
+            }
+          }}>Unlock Dashboard</button>
+        </section>
+      </main>
+    );
+  }
+
+  return <Dashboard onLogout={() => { sessionStorage.removeItem("managerAuthed"); setAuthed(false); }} />;
 }
 
-function useActivities() {
-  const [items, setItems] = useState([]);
+function Dashboard({ onLogout }) {
+  const [activities, setActivities] = useState([]);
+  const [search, setSearch] = useState("");
+  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
+  const [tab, setTab] = useState("points");
+  const [error, setError] = useState("");
+
   useEffect(() => {
-    const q = query(collection(db, "activities"), orderBy("date", "desc"));
-    return onSnapshot(q, snap => setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return subscribeActivities(setActivities, (err) => {
+      console.error(err);
+      setError("Could not load Firestore activities. Check Firebase env vars and Firestore rules.");
+    });
   }, []);
-  return items;
+
+  const filtered = useMemo(() => {
+    return activities.filter((a) => {
+      const matchesMonth = !period || (a.date || "").startsWith(period);
+      const matchesSearch = !search || (a.agent || "").toLowerCase().includes(search.toLowerCase());
+      return matchesMonth && matchesSearch;
+    });
+  }, [activities, period, search]);
+
+  const agents = useMemo(() => aggregateByAgent(filtered), [filtered]);
+  const ranked = useMemo(() => {
+    const key = tab === "bonus" ? "totalBonus" : tab === "productivity" ? "productivity" : tab === "closings" ? "closedCases" : tab === "recruitment" ? "coded" : "totalPoints";
+    return [...agents].sort((a, b) => (b[key] || 0) - (a[key] || 0));
+  }, [agents, tab]);
+
+  const totals = useMemo(() => filtered.reduce((sum, a) => {
+    sum.points += Number(a.totalPoints || 0);
+    sum.closings += Number(a.closedCases || 0);
+    sum.coded += Number(a.coded || 0);
+    sum.bonus += Number(a.bonuses?.totalBonus || 0);
+    return sum;
+  }, { points: 0, closings: 0, coded: 0, bonus: 0 }), [filtered]);
+
+  function exportCsv() {
+    const rows = [
+      ["Date","Agent","Points","Productivity %","Closed","Coded","Closing Bonus","Exam Bonus","Total Bonus","Notes"],
+      ...filtered.map((a) => [
+        a.date,
+        a.agent,
+        a.totalPoints,
+        "",
+        a.closedCases,
+        a.coded,
+        a.bonuses?.closingBonus || 0,
+        a.bonuses?.examBonus || 0,
+        a.bonuses?.totalBonus || 0,
+        (a.notes || "").replaceAll(",", " ")
+      ])
+    ];
+    const blob = new Blob([rows.map((r) => r.join(",")).join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `team-jenna-${period || "report"}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <main className="page">
+      <section className="dash-head">
+        <div>
+          <p className="eyebrow">Private Manager View</p>
+          <h2>Dashboard</h2>
+          <p className="muted">Realtime Firestore summary, rankings, productivity, and bonuses.</p>
+        </div>
+        <button onClick={onLogout}><LogOut size={16}/> Logout</button>
+      </section>
+
+      {error && <div className="error">{error}</div>}
+
+      <section className="stat-grid">
+        <Stat icon={<BarChart3/>} label="Total Points" value={totals.points} />
+        <Stat icon={<CheckCircle/>} label="Closings" value={totals.closings} />
+        <Stat icon={<Users/>} label="Coded" value={totals.coded} />
+        <Stat icon={<Award/>} label="Total Bonus" value={currency(totals.bonus)} />
+      </section>
+
+      <section className="toolbar">
+        <label><CalendarDays size={16}/> Month<input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} /></label>
+        <label><Search size={16}/> Search<input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Agent name" /></label>
+        <button onClick={exportCsv}><Download size={16}/> Export CSV</button>
+      </section>
+
+      <section className="panel">
+        <div className="tabs">
+          {[
+            ["points", "Total Points"],
+            ["productivity", "Productivity"],
+            ["closings", "Closings"],
+            ["recruitment", "Recruitment"],
+            ["bonus", "Total Bonus"],
+          ].map(([id, label]) => <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}
+        </div>
+        <div className="leader-list">
+          {ranked.map((agent, i) => <AgentCard key={agent.agent} agent={agent} rank={i+1} />)}
+          {!ranked.length && <p className="muted">No submissions yet for this period.</p>}
+        </div>
+      </section>
+
+      <section className="panel">
+        <h3>Activity History</h3>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Agent</th><th>Points</th><th>Closed</th><th>Coded</th><th>Bonus</th><th>Action</th></tr></thead>
+            <tbody>
+              {filtered.map((a) => (
+                <tr key={a.id}>
+                  <td>{a.date}</td>
+                  <td>{a.agent}</td>
+                  <td>{a.totalPoints}</td>
+                  <td>{a.closedCases}</td>
+                  <td>{a.coded}</td>
+                  <td>{currency(a.bonuses?.totalBonus || 0)}</td>
+                  <td><button className="danger" onClick={() => {
+                    if (confirm("Delete this entry?")) removeActivity(a.id);
+                  }}><Trash2 size={15}/></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  );
 }
 
-function Dashboard() {
-  const rows = useActivities();
-  const [from, setFrom] = useState(startOfWeek());
-  const [to, setTo] = useState(new Date().toISOString().slice(0,10));
-  const [agentFilter, setAgentFilter] = useState("All");
-  const filtered = rows.filter(r => (!from || r.date >= from) && (!to || r.date <= to) && (agentFilter === "All" || r.agent === agentFilter));
-  const agents = [...new Set(rows.map(r => r.agent).filter(Boolean))].sort();
-
-  const totals = useMemo(() => filtered.reduce((a, r) => {
-    a.points += Number(r.points || 0); a.closedCases += Number(r.closedCases || 0); a.coded += Number(r.coded || 0); a.appointments += Number(r.appointments || 0); a.presentation += Number(r.presentation || 0); a.closedBonus += Number(r.closedBonus || 0); a.examBonus += Number(r.paidExamBonus || 0); return a;
-  }, {points:0, closedCases:0, coded:0, appointments:0, presentation:0, closedBonus:0, examBonus:0}), [filtered]);
-
-  const leaderboard = useMemo(() => {
-    const map = {};
-    filtered.forEach(r => { const k = r.agent || "Unknown"; if(!map[k]) map[k] = {agent:k, points:0, entries:0, closedCases:0, coded:0, appointments:0, presentation:0, bonuses:0}; map[k].points += Number(r.points||0); map[k].entries += 1; map[k].closedCases += Number(r.closedCases||0); map[k].coded += Number(r.coded||0); map[k].appointments += Number(r.appointments||0); map[k].presentation += Number(r.presentation||0); map[k].bonuses += Number(r.closedBonus||0)+Number(r.paidExamBonus||0); });
-    return Object.values(map).sort((a,b)=>b.points-a.points).map((a,i)=>{ const productivity = getProductivity(a.points); const tier = getRewardTier(productivity); return {...a, rank:i+1, productivity, tier}; });
-  }, [filtered]);
-
-  async function remove(id){ if(confirm("Delete this entry?")) await deleteDoc(doc(db,"activities",id)); }
-  function exportCsv(){ const header = ["date","agent","points","productivity","closedCases","coded","appointments","presentation","closedBonus","paidExamBonus","notes"]; const lines = [header.join(",")].concat(filtered.map(r => header.map(h => JSON.stringify(r[h] ?? "")).join(","))); const blob = new Blob([lines.join("\n")], {type:"text/csv"}); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href=url; a.download="team-jenna-activities.csv"; a.click(); URL.revokeObjectURL(url); }
-
-  return <AdminGate><main className="page"><Nav/><section className="panel wide"><div className="dashHead"><div><h1>Manager Dashboard</h1><p className="muted">Points, productivity, bonuses, and rankings.</p></div><button className="ghost" onClick={()=>{sessionStorage.removeItem("tj_admin"); location.reload()}}>Logout</button></div>
-    <div className="filters"><label>From<input type="date" value={from} onChange={e=>setFrom(e.target.value)}/></label><label>To<input type="date" value={to} onChange={e=>setTo(e.target.value)}/></label><label>Agent<select value={agentFilter} onChange={e=>setAgentFilter(e.target.value)}><option>All</option>{agents.map(a=><option key={a}>{a}</option>)}</select></label><button onClick={()=>{setFrom(startOfWeek());setTo(new Date().toISOString().slice(0,10))}}>This Week</button><button onClick={()=>{setFrom(startOfMonth(new Date()));setTo(new Date().toISOString().slice(0,10))}}>This Month</button><button onClick={exportCsv}>Export CSV</button></div>
-    <div className="stats"><Stat label="Total Points" value={num(totals.points)}/><Stat label="Productivity" value={`${Math.round(getProductivity(totals.points))}%`}/><Stat label="Closed Cases" value={num(totals.closedCases)}/><Stat label="Coded Recruits" value={num(totals.coded)}/><Stat label="Appointments" value={num(totals.appointments)}/><Stat label="Presentations" value={num(totals.presentation)}/><Stat label="Bonuses" value={money(totals.closedBonus + totals.examBonus)}/><Stat label="Weekly Target" value={num(WEEKLY_TARGET)}/></div>
-    <h2>Leaderboard</h2><div className="tableWrap"><table><thead><tr><th>Rank</th><th>Agent</th><th>Points</th><th>Productivity</th><th>Tier</th><th>Reward</th><th>Closed</th><th>Coded</th><th>Bonus</th></tr></thead><tbody>{leaderboard.map(r=><tr key={r.agent}><td>#{r.rank}</td><td>{r.agent}</td><td>{num(r.points)}</td><td>{Math.round(r.productivity)}%</td><td><span className="pill" style={{background:r.tier.color}}>{r.tier.label}</span></td><td>{money(r.tier.amount)}</td><td>{r.closedCases}</td><td>{r.coded}</td><td>{money(r.bonuses)}</td></tr>)}</tbody></table></div>
-    <h2>Activity History</h2><div className="tableWrap"><table><thead><tr><th>Date</th><th>Agent</th><th>Points</th><th>Closed</th><th>Coded</th><th>APE</th><th>Closed Bonus</th><th>Exam Bonus</th><th>Notes</th><th></th></tr></thead><tbody>{filtered.map(r=><tr key={r.id}><td>{r.date}</td><td>{r.agent}</td><td>{r.points}</td><td>{r.closedCases}</td><td>{r.coded}</td><td>{money(r.apeAmount)}</td><td>{money(r.closedBonus)}</td><td>{money(r.paidExamBonus)}</td><td>{r.notes}</td><td><button className="danger" onClick={()=>remove(r.id)}>Delete</button></td></tr>)}</tbody></table></div>
-  </section></main></AdminGate>
+function Stat({ icon, label, value }) {
+  return <div className="stat">{icon}<span>{label}</span><strong>{value}</strong></div>;
 }
-function Stat({label,value}){return <div className="stat"><span>{label}</span><b>{value}</b></div>}
-function App(){ const route = location.hash || "#/"; if(route.startsWith("#/form")) return <AgentForm/>; if(route.startsWith("#/admin")) return <Dashboard/>; return <Home/>; }
+
+function AgentCard({ agent, rank }) {
+  const tier = getRewardTier(agent.productivity, agent.hasDiamondRequirement);
+  return (
+    <article className="agent-card">
+      <div className="rank"><Trophy size={18}/> #{rank}</div>
+      <div>
+        <h3>{agent.agent}</h3>
+        <p className="muted">{agent.coachInsight}</p>
+      </div>
+      <div className="agent-metrics">
+        <span>Points <strong>{agent.totalPoints}</strong></span>
+        <span>Productivity <strong>{agent.productivity.toFixed(0)}%</strong></span>
+        <span>Tier <strong>{tier.lockedDiamond ? "Diamond Locked / Gold" : tier.label}</strong></span>
+        <span>Reward <strong>{currency(tier.amount)}</strong></span>
+        <span>Closing Bonus <strong>{currency(agent.closingBonus)}</strong></span>
+        <span>Exam Bonus <strong>{currency(agent.examBonus)}</strong></span>
+        <span>Total Bonus <strong>{currency(agent.totalBonus + tier.amount)}</strong></span>
+      </div>
+      <details>
+        <summary>Activity Breakdown</summary>
+        <div className="breakdown">
+          {Object.entries(agent.breakdown).map(([key, value]) => <span key={key}>{labelize(key)}: <strong>{value}</strong></span>)}
+        </div>
+      </details>
+    </article>
+  );
+}
+
+function aggregateByAgent(rows) {
+  const map = new Map();
+  for (const row of rows) {
+    const name = row.agent || "Unknown";
+    if (!map.has(name)) {
+      map.set(name, {
+        agent: name,
+        totalPoints: 0,
+        closedCases: 0,
+        coded: 0,
+        paidExam: 0,
+        meetTheManager: 0,
+        presentation: 0,
+        appointments: 0,
+        approaches: 0,
+        closingBonus: 0,
+        examBonus: 0,
+        totalBonus: 0,
+        breakdown: {},
+      });
+    }
+    const a = map.get(name);
+    a.totalPoints += Number(row.totalPoints || 0);
+    a.closedCases += Number(row.closedCases || 0);
+    a.coded += Number(row.coded || 0);
+    a.paidExam += Number(row.paidExam || 0);
+    a.meetTheManager += Number(row.meetTheManager || 0);
+    a.presentation += Number(row.presentation || 0);
+    a.appointments += Number(row.appointments || 0);
+    a.approaches += Number(row.approaches || 0);
+    a.closingBonus += Number(row.bonuses?.closingBonus || 0);
+    a.examBonus += Number(row.bonuses?.examBonus || 0);
+    a.totalBonus += Number(row.bonuses?.totalBonus || 0);
+    for (const [k, v] of Object.entries(row.pointsBreakdown || {})) {
+      a.breakdown[k] = (a.breakdown[k] || 0) + Number(v || 0);
+    }
+  }
+
+  return [...map.values()].map((a) => {
+    const productivity = getProductivity(a.totalPoints);
+    const hasRecruit = a.meetTheManager > 0 && a.paidExam > 0;
+    const hasDiamondRequirement = a.closedCases > 0 || hasRecruit;
+    return {
+      ...a,
+      productivity,
+      hasDiamondRequirement,
+      coachInsight: getCoachInsight(a),
+    };
+  });
+}
+
+function getCoachInsight(a) {
+  if (a.totalPoints === 0) return "Inactive this period";
+  if (a.approaches >= 30 && a.appointments <= 2) return "Needs help converting approaches to appointments";
+  if (a.presentation >= 5 && a.closedCases === 0) return "Needs closing support";
+  if (a.meetTheManager >= 2 || a.paidExam >= 2 || a.coded >= 1) return "Recruitment-focused";
+  if (getProductivity(a.totalPoints) >= 100) return "Top performer";
+  return "Active — continue monitoring pipeline";
+}
+
+function labelize(key) {
+  return key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
+}
 
 createRoot(document.getElementById("root")).render(<App />);
