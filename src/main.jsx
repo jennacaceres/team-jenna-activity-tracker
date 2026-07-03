@@ -28,6 +28,7 @@ import {
   getProductivity,
   getRewardTier,
   getNextLevelProgress,
+  getNextLevelInfo,
   getWeekKey
 } from "./points";
 import "./style.css";
@@ -432,6 +433,20 @@ function Dashboard({ onLogout }) {
         <button onClick={exportCsv}><Download size={16}/> Export CSV</button>
       </section>
 
+      <section className="competition-snapshot">
+        <div>
+          <p className="eyebrow">Team Jenna Weekly Challenge</p>
+          <h2>{selectedWeek.label}</h2>
+          <p>{selectedWeek.dateRange}</p>
+        </div>
+        <div className="level-guide">
+          <span className="bronze">🥉 Bronze 300</span>
+          <span className="silver">🥈 Silver 500</span>
+          <span className="gold">🥇 Gold 1,000</span>
+          <span className="diamond">💎 Diamond 1,500 + requirement</span>
+        </div>
+      </section>
+
       <section className="panel">
         <div className="tabs">
           {[
@@ -448,30 +463,69 @@ function Dashboard({ onLogout }) {
         </div>
       </section>
 
+      <section className="panel daily-standings-card">
+        <h3>Today's Standings — Ready to Screenshot</h3>
+        <div className="standing-grid">
+          {ranked.slice(0, 5).map((agent, index) => {
+            const tier = getRewardTier(agent.totalPoints, agent.hasDiamondRequirement);
+            return (
+              <div className="standing-item" key={agent.agent}>
+                <strong>#{index + 1} {agent.agent}</strong>
+                <span>{getTierIcon(tier)} {tier.lockedDiamond ? "Diamond Locked" : tier.label}</span>
+                <em>{agent.totalPoints} pts</em>
+              </div>
+            );
+          })}
+          {!ranked.length && <p className="muted">No standings yet.</p>}
+        </div>
+      </section>
+
       <section className="panel">
         <h3>Activity History — {selectedWeek.label}</h3>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Date</th><th>Agent</th><th>Points</th><th>Closed</th><th>Coded</th><th>Bonus</th><th>Action</th></tr></thead>
+            <thead><tr><th>Date</th><th>Agent</th><th>Level</th><th>Points</th><th>Closed</th><th>Coded</th><th>Bonus</th><th>Summary</th><th>Action</th></tr></thead>
             <tbody>
               {filtered.map((a) => (
-                <tr key={a.id}>
-                  <td>{a.date}</td>
-                  <td>{a.agent}</td>
-                  <td>{a.totalPoints}</td>
-                  <td>{a.closedCases}</td>
-                  <td>{a.coded}</td>
-                  <td>{currency(a.bonuses?.totalBonus || 0)}</td>
-                  <td><button className="danger" onClick={() => {
-                    if (confirm("Delete this entry?")) removeActivity(a.id);
-                  }}><Trash2 size={15}/></button></td>
-                </tr>
+                <ActivityHistoryRow key={a.id} activity={a} onDelete={() => {
+                  if (confirm("Delete this entry?")) removeActivity(a.id);
+                }} />
               ))}
             </tbody>
           </table>
         </div>
       </section>
     </main>
+  );
+}
+
+function ActivityHistoryRow({ activity, onDelete }) {
+  const hasRecruit = Number(activity.meetTheManager || 0) > 0 && Number(activity.paidExam || 0) > 0;
+  const hasDiamondRequirement = Number(activity.closedCases || 0) > 0 || hasRecruit;
+  const tier = getRewardTier(activity.totalPoints || 0, hasDiamondRequirement);
+  const next = getNextLevelInfo(activity.totalPoints || 0, hasDiamondRequirement);
+  const levelClass = tier.lockedDiamond ? "locked" : tier.tier;
+
+  return (
+    <tr className={`history-row level-${levelClass}`}>
+      <td>{activity.date}</td>
+      <td>
+        <strong>{activity.agent || "Unnamed"}</strong>
+        <small>{activity.agentType || "Agent"}</small>
+      </td>
+      <td><span className={`level-chip level-${levelClass}`}>{getTierIcon(tier)} {tier.lockedDiamond ? "Diamond Locked" : tier.label}</span></td>
+      <td><strong>{activity.totalPoints || 0}</strong></td>
+      <td>{activity.closedCases || 0}</td>
+      <td>{activity.coded || 0}</td>
+      <td>{currency(activity.bonuses?.totalBonus || 0)}</td>
+      <td>
+        <div className="history-summary">
+          <span>🎯 {next.label}</span>
+          <span>💰 Bonus: {currency(activity.bonuses?.totalBonus || 0)}</span>
+        </div>
+      </td>
+      <td><button className="danger" onClick={onDelete}><Trash2 size={15}/></button></td>
+    </tr>
   );
 }
 
@@ -493,6 +547,7 @@ function AgentCard({ agent, rank }) {
         <div className="avatar-level">{getTierIcon(tier)}</div>
         <div className="agent-info">
           <h3>{agent.agent}</h3>
+          <div className={`current-level-banner level-${levelClass}`}>{getTierIcon(tier)} {displayTier} MEMBER</div>
           <div className="agent-sub">
             <span className="type-pill">{agent.agentType || "Agent"}</span>
             <span>{agent.entries} entries</span>

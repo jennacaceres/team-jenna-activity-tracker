@@ -175,3 +175,29 @@ export function getMonthKey(dateString) {
 export function currency(value) {
   return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 0 }).format(Number(value || 0));
 }
+
+
+export function getLevelFromPoints(weeklyPoints, hasDiamondRequirement = true) {
+  return getRewardTier(weeklyPoints, hasDiamondRequirement);
+}
+
+export function getNextLevelInfo(weeklyPoints, hasDiamondRequirement = true) {
+  const points = Number(weeklyPoints || 0);
+
+  if (points >= 1500 && hasDiamondRequirement) {
+    return { label: "Diamond qualified", needed: 0, nextLabel: "Diamond", target: 1500, percent: 100 };
+  }
+  if (points >= 1500 && !hasDiamondRequirement) {
+    return { label: "Diamond locked: needs closing or converted recruit", needed: 0, nextLabel: "Diamond Locked", target: 1500, percent: 100 };
+  }
+  if (points >= 1000) {
+    return { label: `${1500 - points} pts to Diamond`, needed: 1500 - points, nextLabel: "Diamond", target: 1500, percent: (points / 1500) * 100 };
+  }
+  if (points >= 500) {
+    return { label: `${1000 - points} pts to Gold`, needed: 1000 - points, nextLabel: "Gold", target: 1000, percent: (points / 1000) * 100 };
+  }
+  if (points >= 300) {
+    return { label: `${500 - points} pts to Silver`, needed: 500 - points, nextLabel: "Silver", target: 500, percent: (points / 500) * 100 };
+  }
+  return { label: `${300 - points} pts to Bronze`, needed: 300 - points, nextLabel: "Bronze", target: 300, percent: (points / 300) * 100 };
+}

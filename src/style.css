@@ -22,3 +22,47 @@
 
 /* V7 July 3 launch */
 .toolbar select{min-width:260px}
+
+
+/* V8 Competition Edition */
+.competition-snapshot{
+  display:flex;
+  justify-content:space-between;
+  gap:18px;
+  align-items:center;
+  background:linear-gradient(135deg,rgba(177,18,38,.55),rgba(30,58,138,.45));
+  border:1px solid rgba(212,175,55,.35);
+  border-radius:24px;
+  padding:20px;
+  margin-bottom:16px;
+  box-shadow:0 18px 60px rgba(0,0,0,.25);
+}
+.competition-snapshot h2{font-size:32px;margin:0;color:#facc15}
+.level-guide{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.level-guide span{padding:9px 12px;border-radius:999px;font-weight:900;background:rgba(255,255,255,.08)}
+.level-guide .bronze{color:#fed7aa}.level-guide .silver{color:#e5e7eb}.level-guide .gold{color:#facc15}.level-guide .diamond{color:#ddd6fe}
+.current-level-banner{
+  display:inline-flex;
+  margin:5px 0 7px;
+  border-radius:999px;
+  padding:6px 12px;
+  font-weight:950;
+  letter-spacing:.04em;
+}
+.current-level-banner.level-bronze{background:#7c2d12;color:#fed7aa}
+.current-level-banner.level-silver{background:#475569;color:#f8fafc}
+.current-level-banner.level-gold{background:#854d0e;color:#fde68a}
+.current-level-banner.level-diamond{background:#581c87;color:#ddd6fe}
+.current-level-banner.level-locked{background:#7f1d1d;color:#fecaca}
+.daily-standings-card{margin-bottom:16px}
+.standing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.standing-item{background:rgba(255,255,255,.055);border:1px solid rgba(212,175,55,.18);border-radius:16px;padding:14px}
+.standing-item strong,.standing-item span,.standing-item em{display:block}
+.standing-item strong{font-size:16px}.standing-item span{color:#facc15;font-weight:900;margin:5px 0}.standing-item em{font-style:normal;color:#86efac;font-weight:900}
+.history-row td small{display:block;color:#94a3b8;margin-top:3px}
+.history-summary{display:grid;gap:4px;font-size:13px;color:#cbd5e1}
+.history-summary span:first-child{color:#facc15}
+@media(max-width:850px){
+  .competition-snapshot{flex-direction:column;align-items:flex-start}
+  .level-guide{justify-content:flex-start}
+}
