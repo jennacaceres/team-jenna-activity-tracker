@@ -158,11 +158,10 @@ function AgentForm() {
   const points = useMemo(() => calculatePoints(form), [form]);
   const bonuses = useMemo(() => calculateBonuses(form), [form]);
   const currentWeekKey = getCompetitionWeek(new Date().toISOString().slice(0, 10)).key;
-  const topFiveAgents = useMemo(() => {
+  const weeklyParticipants = useMemo(() => {
     const currentWeekRows = activities.filter((activity) => getCompetitionWeek(activity.date).key === currentWeekKey);
     return aggregateByAgent(currentWeekRows)
-      .sort((a, b) => b.totalPoints - a.totalPoints)
-      .slice(0, 5);
+      .sort((a, b) => b.totalPoints - a.totalPoints || a.agent.localeCompare(b.agent));
   }, [activities, currentWeekKey]);
 
   function setField(key, value) {
@@ -306,11 +305,11 @@ function AgentForm() {
 
       <section className="panel daily-standings-card public-standings-card">
         <p className="eyebrow">Live Weekly Ranking</p>
-        <h3>Top 5 Agents</h3>
-        <p className="muted">Rankings update automatically based on total points for the current competition week.</p>
+        <h3>This Week's Leaderboard</h3>
+        <p className="muted">{weeklyParticipants.length} of {AGENT_NAMES.length} agents have submitted this week. Rankings update automatically based on total weekly points.</p>
         {standingsError && <div className="error">{standingsError}</div>}
         <div className="standing-grid">
-          {topFiveAgents.map((agent, index) => {
+          {weeklyParticipants.map((agent, index) => {
             const tier = getRewardTier(agent.totalPoints, agent.hasDiamondRequirement);
             return (
               <div className="standing-item" key={agent.agent}>
@@ -320,7 +319,7 @@ function AgentForm() {
               </div>
             );
           })}
-          {!topFiveAgents.length && !standingsError && <p className="muted">No submissions yet for the current week.</p>}
+          {!weeklyParticipants.length && !standingsError && <p className="muted">No submissions yet for the current week. Be the first to join the leaderboard!</p>}
         </div>
       </section>
 
