@@ -60,7 +60,6 @@ const AGENT_NAMES = [
 const initialForm = {
   date: new Date().toISOString().slice(0, 10),
   agent: "",
-  agentType: "Agent",
   approaches: 0,
   appointments: 0,
   presentation: 0,
@@ -146,9 +145,25 @@ function AgentForm() {
   const [examModal, setExamModal] = useState(false);
   const [apeInput, setApeInput] = useState("");
   const [saving, setSaving] = useState(false);
+  const [activities, setActivities] = useState([]);
+  const [standingsError, setStandingsError] = useState("");
+
+  useEffect(() => {
+    return subscribeActivities(setActivities, (err) => {
+      console.error(err);
+      setStandingsError("Could not load the live standings.");
+    });
+  }, []);
 
   const points = useMemo(() => calculatePoints(form), [form]);
   const bonuses = useMemo(() => calculateBonuses(form), [form]);
+  const currentWeekKey = getCompetitionWeek(new Date().toISOString().slice(0, 10)).key;
+  const topFiveAgents = useMemo(() => {
+    const currentWeekRows = activities.filter((activity) => getCompetitionWeek(activity.date).key === currentWeekKey);
+    return aggregateByAgent(currentWeekRows)
+      .sort((a, b) => b.totalPoints - a.totalPoints)
+      .slice(0, 5);
+  }, [activities, currentWeekKey]);
 
   function setField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -243,15 +258,6 @@ function AgentForm() {
             </label>
             <label>Date<input type="date" value={form.date} onChange={(e) => setField("date", e.target.value)} /></label>
           </div>
-          <label>Agent Type
-            <select value={form.agentType} onChange={(e) => setField("agentType", e.target.value)}>
-              <option>Agent</option>
-              <option>Rookie</option>
-              <option>AUM</option>
-              <option>Manager</option>
-            </select>
-          </label>
-
           <div className="counter-list">
             {activityRows.map(([id, label, help]) => (
               <CounterRow
@@ -297,6 +303,26 @@ function AgentForm() {
           )}
         </aside>
       </form>
+
+      <section className="panel daily-standings-card public-standings-card">
+        <p className="eyebrow">Live Weekly Ranking</p>
+        <h3>Top 5 Agents</h3>
+        <p className="muted">Rankings update automatically based on total points for the current competition week.</p>
+        {standingsError && <div className="error">{standingsError}</div>}
+        <div className="standing-grid">
+          {topFiveAgents.map((agent, index) => {
+            const tier = getRewardTier(agent.totalPoints, agent.hasDiamondRequirement);
+            return (
+              <div className="standing-item" key={agent.agent}>
+                <strong>#{index + 1} {agent.agent}</strong>
+                <span>{getTierIcon(tier)} {tier.lockedDiamond ? "Diamond Locked" : tier.label}</span>
+                <em>{agent.totalPoints} pts</em>
+              </div>
+            );
+          })}
+          {!topFiveAgents.length && !standingsError && <p className="muted">No submissions yet for the current week.</p>}
+        </div>
+      </section>
 
       {closedModal && (
         <Modal title="Closed Case APE">
@@ -487,23 +513,6 @@ function Dashboard({ onLogout }) {
         <div className="leader-list">
           {ranked.map((agent, i) => <AgentCard key={agent.agent} agent={agent} rank={i+1} />)}
           {!ranked.length && <p className="muted">No submissions yet for this period.</p>}
-        </div>
-      </section>
-
-      <section className="panel daily-standings-card">
-        <h3>Today's Standings — Ready to Screenshot</h3>
-        <div className="standing-grid">
-          {ranked.slice(0, 5).map((agent, index) => {
-            const tier = getRewardTier(agent.totalPoints, agent.hasDiamondRequirement);
-            return (
-              <div className="standing-item" key={agent.agent}>
-                <strong>#{index + 1} {agent.agent}</strong>
-                <span>{getTierIcon(tier)} {tier.lockedDiamond ? "Diamond Locked" : tier.label}</span>
-                <em>{agent.totalPoints} pts</em>
-              </div>
-            );
-          })}
-          {!ranked.length && <p className="muted">No standings yet.</p>}
         </div>
       </section>
 
