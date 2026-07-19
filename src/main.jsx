@@ -35,6 +35,28 @@ import "./style.css";
 
 const MANAGER_PIN = import.meta.env.VITE_MANAGER_PIN || "123456";
 
+const AGENT_NAMES = [
+  "Bon, Karen Andrea",
+  "Alejandria, Eden",
+  "Gutierrez, Richard",
+  "Peña, Cezar",
+  "Pajarillo, Angela Lou",
+  "Francisco, Roshelle",
+  "Cemeni, Abegail",
+  "Guevara, Ma. Paula Jean",
+  "Peña, Kathleen Ann",
+  "Naval, Fayzah",
+  "Bardon, Haidee",
+  "Bon, Eric Ryan",
+  "Manio, Isiah Godffrey",
+  "Echano, John Philip",
+  "Delos Reyes, Jay Ann",
+  "Guevara, Jenna Ruth",
+  "Garcia, Marites",
+  "Cardino, Rechie",
+  "Tapan, Justine Louise",
+];
+
 const initialForm = {
   date: new Date().toISOString().slice(0, 10),
   agent: "",
@@ -176,13 +198,13 @@ function AgentForm() {
 
   async function submit(e) {
     e.preventDefault();
-    if (!form.agent.trim()) return alert("Please enter agent name.");
+    if (!form.agent) return alert("Please select your name.");
     setSaving(true);
     setMessage("");
     try {
       const payload = {
         ...form,
-        agent: form.agent.trim(),
+        agent: form.agent,
         pointsBreakdown: points.breakdown,
         totalPoints: points.total,
         brandingCounted: points.brandingCounted,
@@ -213,7 +235,12 @@ function AgentForm() {
       <form className="grid form-grid" onSubmit={submit}>
         <section className="panel wide">
           <div className="two-col">
-            <label>Agent Name<input value={form.agent} onChange={(e) => setField("agent", e.target.value)} placeholder="Type your name" /></label>
+            <label>Agent Name
+              <select value={form.agent} onChange={(e) => setField("agent", e.target.value)} required>
+                <option value="">Select your name</option>
+                {AGENT_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+            </label>
             <label>Date<input type="date" value={form.date} onChange={(e) => setField("date", e.target.value)} /></label>
           </div>
           <label>Agent Type
