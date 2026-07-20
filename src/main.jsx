@@ -61,7 +61,8 @@ const initialForm = {
   date: new Date().toISOString().slice(0, 10),
   agent: "",
   approaches: 0,
-  appointments: 0,
+  clientAppointments: 0,
+  bybInvites: 0,
   presentation: 0,
   bybTableTop: 0,
   meetTheManager: 0,
@@ -79,7 +80,8 @@ const initialForm = {
 
 const activityRows = [
   ["approaches", "Approaches", "Every prospect approached"],
-  ["appointments", "Appointments / BYB Invite", "Booked appointment or invite"],
+  ["clientAppointments", "Client Appointments", "Booked appointment with a client or prospect"],
+  ["bybInvites", "BYB Invites", "Invitations sent for Build Your Business"],
   ["presentation", "Presentation", "Financial planning or plan presentation"],
   ["bybTableTop", "BYB / Table Top", "Business presentation"],
   ["meetTheManager", "Meet the Manager", "Recruit attended MTM"],
@@ -432,10 +434,12 @@ function Dashboard({ onLogout }) {
 
   function exportCsv() {
     const rows = [
-      ["Date","Agent","Points","Productivity %","Closed","Coded","Closing Bonus","Exam Bonus","Total Bonus","Notes"],
+      ["Date","Agent","Client Appointments","BYB Invites","Points","Productivity %","Closed","Coded","Closing Bonus","Exam Bonus","Total Bonus","Notes"],
       ...filtered.map((a) => [
         a.date,
         a.agent,
+        Number(a.clientAppointments ?? a.appointments ?? 0),
+        Number(a.bybInvites || 0),
         a.totalPoints,
         "",
         a.closedCases,
@@ -607,7 +611,8 @@ function AgentCard({ agent, rank }) {
         <span>Total Bonus <strong>{currency(totalReward)}</strong></span>
         <span>Closings <strong>{agent.closedCases}</strong></span>
         <span>Coded Recruits <strong>{agent.coded}</strong></span>
-        <span>Appointments <strong>{agent.appointments}</strong></span>
+        <span>Client Appointments <strong>{agent.clientAppointments}</strong></span>
+        <span>BYB Invites <strong>{agent.bybInvites}</strong></span>
         <span>Presentations <strong>{agent.presentation}</strong></span>
       </div>
 
@@ -649,7 +654,8 @@ function aggregateByAgent(rows) {
         paidExam: 0,
         meetTheManager: 0,
         presentation: 0,
-        appointments: 0,
+        clientAppointments: 0,
+        bybInvites: 0,
         approaches: 0,
         closingBonus: 0,
         examBonus: 0,
@@ -659,7 +665,8 @@ function aggregateByAgent(rows) {
         breakdown: {},
         rawTotals: {
           approaches: 0,
-          appointments: 0,
+          clientAppointments: 0,
+          bybInvites: 0,
           presentation: 0,
           bybTableTop: 0,
           meetTheManager: 0,
@@ -682,13 +689,18 @@ function aggregateByAgent(rows) {
     a.paidExam += Number(row.paidExam || 0);
     a.meetTheManager += Number(row.meetTheManager || 0);
     a.presentation += Number(row.presentation || 0);
-    a.appointments += Number(row.appointments || 0);
+    a.clientAppointments += Number(row.clientAppointments ?? row.appointments ?? 0);
+    a.bybInvites += Number(row.bybInvites || 0);
     a.approaches += Number(row.approaches || 0);
     a.closingBonus += Number(row.bonuses?.closingBonus || 0);
     a.examBonus += Number(row.bonuses?.examBonus || 0);
     a.totalBonus += Number(row.bonuses?.totalBonus || 0);
     for (const key of Object.keys(a.rawTotals)) {
-      a.rawTotals[key] += Number(row[key] || 0);
+      if (key === "clientAppointments") {
+        a.rawTotals[key] += Number(row.clientAppointments ?? row.appointments ?? 0);
+      } else {
+        a.rawTotals[key] += Number(row[key] || 0);
+      }
     }
     for (const [k, v] of Object.entries(row.pointsBreakdown || {})) {
       a.breakdown[k] = (a.breakdown[k] || 0) + Number(v || 0);
@@ -710,7 +722,7 @@ function aggregateByAgent(rows) {
 
 function getCoachInsight(a) {
   if (a.totalPoints === 0) return "Inactive this period";
-  if (a.approaches >= 30 && a.appointments <= 2) return "Needs help converting approaches to appointments";
+  if (a.approaches >= 30 && a.clientAppointments <= 2) return "Needs help converting approaches to client appointments";
   if (a.presentation >= 5 && a.closedCases === 0) return "Needs closing support";
   if (a.meetTheManager >= 2 || a.paidExam >= 2 || a.coded >= 1) return "Recruitment-focused";
   if (a.totalPoints >= 1000) return "Top performer";

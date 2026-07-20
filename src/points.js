@@ -1,6 +1,7 @@
 export const POINT_VALUES = {
   approaches: 1,
-  appointments: 5,
+  clientAppointments: 5,
+  bybInvites: 5,
   presentation: 20,
   bybTableTop: 20,
   closedCases: 200,
@@ -112,7 +113,8 @@ export function calculatePoints(data) {
 
   const breakdown = {
     approaches: safe("approaches") * POINT_VALUES.approaches,
-    appointments: safe("appointments") * POINT_VALUES.appointments,
+    clientAppointments: safe("clientAppointments") * POINT_VALUES.clientAppointments,
+    bybInvites: safe("bybInvites") * POINT_VALUES.bybInvites,
     presentation: safe("presentation") * POINT_VALUES.presentation,
     bybTableTop: safe("bybTableTop") * POINT_VALUES.bybTableTop,
     closedCases: safe("closedCases") * POINT_VALUES.closedCases,
