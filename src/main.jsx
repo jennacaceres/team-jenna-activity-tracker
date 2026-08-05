@@ -174,39 +174,13 @@ function AgentForm() {
         agent.coded > 0 ||
         agent.closedCases > 0
       )
-      .map((agent) => ({
-        ...agent,
-        resultsScore:
-          agent.closedCases * 100 +
-          agent.coded * 80 +
-          agent.presentation * 10 +
-          agent.bybTableTop * 5,
-      }))
       .sort((a, b) =>
-        b.resultsScore - a.resultsScore ||
         b.closedCases - a.closedCases ||
         b.coded - a.coded ||
         b.presentation - a.presentation ||
         b.bybTableTop - a.bybTableTop ||
         a.agent.localeCompare(b.agent)
       );
-  }, [weeklyParticipants]);
-
-  const weeklyMvps = useMemo(() => {
-    const categories = [
-      { key: "presentation", label: "Most Presentations", icon: "🎤" },
-      { key: "bybTableTop", label: "Most BYB / Table Tops", icon: "🤝" },
-      { key: "closedCases", label: "Most Closed Cases", icon: "💰" },
-      { key: "coded", label: "Most Coded Recruits", icon: "🎯" },
-    ];
-
-    return categories.map((category) => {
-      const highest = Math.max(0, ...weeklyParticipants.map((agent) => Number(agent[category.key] || 0)));
-      const leaders = highest > 0
-        ? weeklyParticipants.filter((agent) => Number(agent[category.key] || 0) === highest)
-        : [];
-      return { ...category, highest, leaders };
-    });
   }, [weeklyParticipants]);
 
   function setField(key, value) {
@@ -348,70 +322,29 @@ function AgentForm() {
         </aside>
       </form>
 
-      <section className="panel daily-standings-card public-standings-card">
-        <p className="eyebrow">Live Weekly Ranking</p>
-        <h3>This Week's Leaderboard</h3>
-        <p className="muted">{weeklyParticipants.length} of {AGENT_NAMES.length} agents have submitted this week. Rankings update automatically based on total weekly points.</p>
-        {standingsError && <div className="error">{standingsError}</div>}
-        <div className="standing-grid">
-          {weeklyParticipants.map((agent, index) => {
-            const tier = getRewardTier(agent.totalPoints, agent.hasDiamondRequirement);
-            return (
-              <div className="standing-item" key={agent.agent}>
-                <strong>#{index + 1} {agent.agent}</strong>
-                <span>{getTierIcon(tier)} {tier.lockedDiamond ? "Diamond Locked" : tier.label}</span>
-                <em>{agent.totalPoints} pts</em>
-              </div>
-            );
-          })}
-          {!weeklyParticipants.length && !standingsError && <p className="muted">No submissions yet for the current week. Be the first to join the leaderboard!</p>}
-        </div>
-      </section>
-
-
       <section className="panel public-standings-card results-board-card">
         <p className="eyebrow">Results-Based Ranking</p>
-        <h3>Weekly Results Leaderboard</h3>
-        <p className="muted">Only agents with a Presentation, BYB / Table Top, Coded Recruit, or Closed Case appear here. Results Score: Closed Case 100 • Coded 80 • Presentation 10 • BYB / Table Top 5.</p>
+        <h3>Weekly Scoreboard</h3>
+        <p className="muted">Only agents with at least one Presentation, BYB / Table Top, Coded Recruit, or Closed Case appear here.</p>
+        {standingsError && <div className="error">{standingsError}</div>}
         <div className="results-scoreboard">
           {weeklyResults.map((agent, index) => (
             <div className="result-row" key={agent.agent}>
               <div className="result-rank">#{index + 1}</div>
               <div className="result-agent">
                 <strong>{agent.agent}</strong>
-                <small>{agent.totalPoints} activity points</small>
               </div>
               <div className="result-metric"><span>Presentations</span><strong>{agent.presentation}</strong></div>
               <div className="result-metric"><span>BYB / Table Top</span><strong>{agent.bybTableTop}</strong></div>
               <div className="result-metric result-highlight"><span>Coded</span><strong>{agent.coded}</strong></div>
               <div className="result-metric result-highlight"><span>Closed Cases</span><strong>{agent.closedCases}</strong></div>
-              <div className="result-score"><span>Results Score</span><strong>{agent.resultsScore}</strong></div>
             </div>
           ))}
-          {!weeklyResults.length && !standingsError && <p className="muted">No result-producing activities have been submitted yet this week.</p>}
+          {!weeklyResults.length && !standingsError && <p className="muted">No presentations, BYB / Table Tops, coded recruits, or closed cases have been submitted yet this week.</p>}
         </div>
-      </section>
-
-      <section className="panel public-standings-card mvp-card">
-        <p className="eyebrow">Multiple Ways to Win</p>
-        <h3>Weekly MVPs</h3>
-        <p className="muted">Category leaders are highlighted based on this week's submitted results.</p>
-        <div className="mvp-grid">
-          {weeklyMvps.map((mvp) => (
-            <div className="mvp-item" key={mvp.key}>
-              <div className="mvp-icon">{mvp.icon}</div>
-              <span>{mvp.label}</span>
-              {mvp.leaders.length ? (
-                <>
-                  <strong>{mvp.leaders.map((leader) => leader.agent).join(" • ")}</strong>
-                  <em>{mvp.highest}</em>
-                </>
-              ) : (
-                <strong className="muted">No result yet</strong>
-              )}
-            </div>
-          ))}
-        </div>
+        {!!weeklyResults.length && (
+          <p className="scoreboard-note">Ranked by Closed Cases, then Coded Recruits, Presentations, and BYB / Table Tops.</p>
+        )}
       </section>
 
       {closedModal && (
