@@ -68,3 +68,24 @@
 }
 
 .public-standings-card{margin-top:18px}.public-standings-card h3{font-size:26px;margin-bottom:6px}
+
+
+/* Agent Form results leaderboard and weekly MVPs */
+.results-board-card{border-color:rgba(134,239,172,.24)}
+.results-scoreboard{display:grid;gap:10px;margin-top:16px}
+.result-row{display:grid;grid-template-columns:48px minmax(190px,1.4fr) repeat(4,minmax(92px,.65fr)) minmax(105px,.75fr);gap:10px;align-items:stretch;background:rgba(255,255,255,.055);border:1px solid rgba(212,175,55,.18);border-radius:18px;padding:12px}
+.result-rank{display:grid;place-items:center;font-size:20px;font-weight:950;color:#facc15}
+.result-agent{display:flex;flex-direction:column;justify-content:center;gap:4px}
+.result-agent strong{font-size:16px}.result-agent small{color:#94a3b8}
+.result-metric,.result-score{display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;background:rgba(2,6,23,.48);border-radius:14px;padding:10px 8px}
+.result-metric span,.result-score span{color:#a7b0c0;font-size:12px}.result-metric strong,.result-score strong{font-size:23px;margin-top:4px;color:#f8fafc}
+.result-metric.result-highlight{border:1px solid rgba(212,175,55,.25);background:rgba(177,18,38,.16)}
+.result-metric.result-highlight strong{color:#facc15}
+.result-score{background:linear-gradient(135deg,rgba(177,18,38,.52),rgba(212,175,55,.2));border:1px solid rgba(212,175,55,.38)}
+.result-score strong{color:#86efac;font-size:26px}
+.mvp-card{border-color:rgba(167,139,250,.3)}
+.mvp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
+.mvp-item{background:rgba(255,255,255,.055);border:1px solid rgba(167,139,250,.22);border-radius:18px;padding:16px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:7px}
+.mvp-icon{font-size:30px}.mvp-item span{color:#d8b4fe;font-weight:900}.mvp-item strong{font-size:15px}.mvp-item em{font-style:normal;color:#86efac;font-size:28px;font-weight:950}
+@media(max-width:1000px){.result-row{grid-template-columns:44px minmax(180px,1fr) repeat(3,1fr)}.result-agent{grid-column:2/-1}.result-score{grid-column:span 2}.mvp-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.result-row{grid-template-columns:40px 1fr 1fr}.result-agent{grid-column:2/-1}.result-score{grid-column:1/-1}.mvp-grid{grid-template-columns:1fr}}

@@ -166,6 +166,49 @@ function AgentForm() {
       .sort((a, b) => b.totalPoints - a.totalPoints || a.agent.localeCompare(b.agent));
   }, [activities, currentWeekKey]);
 
+  const weeklyResults = useMemo(() => {
+    return weeklyParticipants
+      .filter((agent) =>
+        agent.presentation > 0 ||
+        agent.bybTableTop > 0 ||
+        agent.coded > 0 ||
+        agent.closedCases > 0
+      )
+      .map((agent) => ({
+        ...agent,
+        resultsScore:
+          agent.closedCases * 100 +
+          agent.coded * 80 +
+          agent.presentation * 10 +
+          agent.bybTableTop * 5,
+      }))
+      .sort((a, b) =>
+        b.resultsScore - a.resultsScore ||
+        b.closedCases - a.closedCases ||
+        b.coded - a.coded ||
+        b.presentation - a.presentation ||
+        b.bybTableTop - a.bybTableTop ||
+        a.agent.localeCompare(b.agent)
+      );
+  }, [weeklyParticipants]);
+
+  const weeklyMvps = useMemo(() => {
+    const categories = [
+      { key: "presentation", label: "Most Presentations", icon: "🎤" },
+      { key: "bybTableTop", label: "Most BYB / Table Tops", icon: "🤝" },
+      { key: "closedCases", label: "Most Closed Cases", icon: "💰" },
+      { key: "coded", label: "Most Coded Recruits", icon: "🎯" },
+    ];
+
+    return categories.map((category) => {
+      const highest = Math.max(0, ...weeklyParticipants.map((agent) => Number(agent[category.key] || 0)));
+      const leaders = highest > 0
+        ? weeklyParticipants.filter((agent) => Number(agent[category.key] || 0) === highest)
+        : [];
+      return { ...category, highest, leaders };
+    });
+  }, [weeklyParticipants]);
+
   function setField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -322,6 +365,52 @@ function AgentForm() {
             );
           })}
           {!weeklyParticipants.length && !standingsError && <p className="muted">No submissions yet for the current week. Be the first to join the leaderboard!</p>}
+        </div>
+      </section>
+
+
+      <section className="panel public-standings-card results-board-card">
+        <p className="eyebrow">Results-Based Ranking</p>
+        <h3>Weekly Results Leaderboard</h3>
+        <p className="muted">Only agents with a Presentation, BYB / Table Top, Coded Recruit, or Closed Case appear here. Results Score: Closed Case 100 • Coded 80 • Presentation 10 • BYB / Table Top 5.</p>
+        <div className="results-scoreboard">
+          {weeklyResults.map((agent, index) => (
+            <div className="result-row" key={agent.agent}>
+              <div className="result-rank">#{index + 1}</div>
+              <div className="result-agent">
+                <strong>{agent.agent}</strong>
+                <small>{agent.totalPoints} activity points</small>
+              </div>
+              <div className="result-metric"><span>Presentations</span><strong>{agent.presentation}</strong></div>
+              <div className="result-metric"><span>BYB / Table Top</span><strong>{agent.bybTableTop}</strong></div>
+              <div className="result-metric result-highlight"><span>Coded</span><strong>{agent.coded}</strong></div>
+              <div className="result-metric result-highlight"><span>Closed Cases</span><strong>{agent.closedCases}</strong></div>
+              <div className="result-score"><span>Results Score</span><strong>{agent.resultsScore}</strong></div>
+            </div>
+          ))}
+          {!weeklyResults.length && !standingsError && <p className="muted">No result-producing activities have been submitted yet this week.</p>}
+        </div>
+      </section>
+
+      <section className="panel public-standings-card mvp-card">
+        <p className="eyebrow">Multiple Ways to Win</p>
+        <h3>Weekly MVPs</h3>
+        <p className="muted">Category leaders are highlighted based on this week's submitted results.</p>
+        <div className="mvp-grid">
+          {weeklyMvps.map((mvp) => (
+            <div className="mvp-item" key={mvp.key}>
+              <div className="mvp-icon">{mvp.icon}</div>
+              <span>{mvp.label}</span>
+              {mvp.leaders.length ? (
+                <>
+                  <strong>{mvp.leaders.map((leader) => leader.agent).join(" • ")}</strong>
+                  <em>{mvp.highest}</em>
+                </>
+              ) : (
+                <strong className="muted">No result yet</strong>
+              )}
+            </div>
+          ))}
         </div>
       </section>
 
@@ -654,6 +743,7 @@ function aggregateByAgent(rows) {
         paidExam: 0,
         meetTheManager: 0,
         presentation: 0,
+        bybTableTop: 0,
         clientAppointments: 0,
         bybInvites: 0,
         approaches: 0,
@@ -689,6 +779,7 @@ function aggregateByAgent(rows) {
     a.paidExam += Number(row.paidExam || 0);
     a.meetTheManager += Number(row.meetTheManager || 0);
     a.presentation += Number(row.presentation || 0);
+    a.bybTableTop += Number(row.bybTableTop || 0);
     a.clientAppointments += Number(row.clientAppointments ?? row.appointments ?? 0);
     a.bybInvites += Number(row.bybInvites || 0);
     a.approaches += Number(row.approaches || 0);
