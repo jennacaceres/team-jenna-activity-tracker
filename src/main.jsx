@@ -394,6 +394,7 @@ function AgentForm() {
                   <strong>{agent.agent}</strong>
                   <span className={`level-chip level-${levelClass}`}>{getTierIcon(tier)} {displayTier}</span>
                 </div>
+                <div className="points-entry"><strong>{agent.activeDays}</strong><span>/ 7 days</span></div>
                 <div className="points-total"><strong>{agent.totalPoints}</strong><span>points</span></div>
               </div>
             );
@@ -766,6 +767,8 @@ function aggregateByAgent(rows) {
         totalBonus: 0,
         agentType: row.agentType || "Agent",
         entries: 0,
+        activeDates: new Set(),
+        activeDays: 0,
         breakdown: {},
         rawTotals: {
           approaches: 0,
@@ -786,6 +789,7 @@ function aggregateByAgent(rows) {
     }
     const a = map.get(name);
     a.entries += 1;
+    if (row.date) a.activeDates.add(row.date);
     a.agentType = row.agentType || a.agentType || "Agent";
     a.totalPoints += Number(row.totalPoints || 0);
     a.closedCases += Number(row.closedCases || 0);
@@ -813,6 +817,8 @@ function aggregateByAgent(rows) {
   }
 
   return [...map.values()].map((a) => {
+    a.activeDays = a.activeDates.size;
+    delete a.activeDates;
     const productivity = getProductivity(a.totalPoints);
     const hasRecruit = a.meetTheManager > 0 && a.paidExam > 0;
     const hasDiamondRequirement = a.closedCases > 0 || hasRecruit;
