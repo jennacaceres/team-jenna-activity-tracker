@@ -35,6 +35,21 @@ import "./style.css";
 
 const MANAGER_PIN = import.meta.env.VITE_MANAGER_PIN || "123456";
 
+function getLocalIsoDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getAgentDateLimits() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const earliest = new Date(today);
+  earliest.setDate(earliest.getDate() - 2);
+  return { min: getLocalIsoDate(earliest), max: getLocalIsoDate(today) };
+}
+
 const AGENT_NAMES = [
   "Bon, Karen Andrea",
   "Alejandria, Eden",
@@ -58,7 +73,7 @@ const AGENT_NAMES = [
 ];
 
 const initialForm = {
-  date: new Date().toISOString().slice(0, 10),
+  date: getLocalIsoDate(),
   agent: "",
   approaches: 0,
   clientAppointments: 0,
@@ -232,6 +247,10 @@ function AgentForm() {
   async function submit(e) {
     e.preventDefault();
     if (!form.agent) return alert("Please select your name.");
+    const { min: minAllowedDate, max: maxAllowedDate } = getAgentDateLimits();
+    if (!form.date || form.date < minAllowedDate || form.date > maxAllowedDate) {
+      return alert(`Activities can only be encoded for today or the previous 2 days (${minAllowedDate} to ${maxAllowedDate}).`);
+    }
     setSaving(true);
     setMessage("");
     try {
@@ -248,7 +267,7 @@ function AgentForm() {
       };
       await saveActivity(payload);
       setMessage(`✅ Activity saved! ${points.total} points. Bonus: ${currency(bonuses.totalBonus)}.`);
-      setForm({ ...initialForm, date: new Date().toISOString().slice(0, 10) });
+      setForm({ ...initialForm, date: getLocalIsoDate() });
     } catch (error) {
       console.error(error);
       alert("Saving failed. Please check Firebase environment variables and Firestore rules.");
@@ -256,6 +275,8 @@ function AgentForm() {
       setSaving(false);
     }
   }
+
+  const { min: minAllowedDate, max: maxAllowedDate } = getAgentDateLimits();
 
   return (
     <main className="page">
@@ -274,7 +295,7 @@ function AgentForm() {
                 {AGENT_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
               </select>
             </label>
-            <label>Date<input type="date" value={form.date} onChange={(e) => setField("date", e.target.value)} /></label>
+            <label>Date<input type="date" min={minAllowedDate} max={maxAllowedDate} value={form.date} onChange={(e) => setField("date", e.target.value)} /></label>
           </div>
           <div className="counter-list">
             {activityRows.map(([id, label, help]) => (
