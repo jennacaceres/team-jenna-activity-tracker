@@ -84,3 +84,25 @@
 .scoreboard-note{margin:14px 0 0;color:#94a3b8;font-size:13px}
 @media(max-width:1000px){.result-row{grid-template-columns:44px minmax(180px,1fr) repeat(2,1fr)}.result-agent{grid-column:2/-1}}
 @media(max-width:600px){.result-row{grid-template-columns:40px 1fr 1fr}.result-agent{grid-column:2/-1}}
+
+
+/* Agent Form weekly points leaderboard */
+.points-board-card{border-color:rgba(250,204,21,.28)}
+.points-scoreboard{display:grid;gap:10px;margin-top:16px}
+.points-row{display:grid;grid-template-columns:52px 1fr 120px;gap:12px;align-items:center;background:rgba(255,255,255,.055);border:1px solid rgba(212,175,55,.18);border-radius:18px;padding:12px 14px}
+.points-rank{font-size:20px;font-weight:950;color:#facc15;text-align:center}
+.points-agent{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.points-agent strong{font-size:16px}
+.points-total{text-align:right}
+.points-total strong{display:block;font-size:28px;line-height:1;color:#86efac}
+.points-total span{display:block;color:#a7b0c0;font-size:12px;margin-top:4px}
+@media(max-width:600px){.points-row{grid-template-columns:40px 1fr}.points-total{grid-column:2;text-align:left}.points-agent{align-items:flex-start;flex-direction:column}}
+
+
+/* Agent Form ranking week selector */
+.ranking-week-card{border-color:rgba(96,165,250,.28)}
+.ranking-week-control{display:flex;justify-content:space-between;align-items:flex-end;gap:18px}
+.ranking-week-control h3{margin-bottom:6px}
+.ranking-week-control label{min-width:300px;margin:0}
+.ranking-week-control select{min-width:300px}
+@media(max-width:700px){.ranking-week-control{align-items:stretch;flex-direction:column}.ranking-week-control label,.ranking-week-control select{min-width:0;width:100%}}

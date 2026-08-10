@@ -164,6 +164,8 @@ function AgentForm() {
   const [saving, setSaving] = useState(false);
   const [activities, setActivities] = useState([]);
   const [standingsError, setStandingsError] = useState("");
+  const currentCompetitionWeek = getCompetitionWeek(new Date().toISOString().slice(0, 10));
+  const [rankingWeekKey, setRankingWeekKey] = useState(currentCompetitionWeek.key);
 
   useEffect(() => {
     return subscribeActivities(setActivities, (err) => {
@@ -174,12 +176,27 @@ function AgentForm() {
 
   const points = useMemo(() => calculatePoints(form), [form]);
   const bonuses = useMemo(() => calculateBonuses(form), [form]);
-  const currentWeekKey = getCompetitionWeek(new Date().toISOString().slice(0, 10)).key;
+
+  const rankingWeeks = useMemo(() => {
+    const weeks = new Map();
+    weeks.set(currentCompetitionWeek.key, currentCompetitionWeek);
+    activities.forEach((activity) => {
+      const week = getCompetitionWeek(activity.date);
+      if (week.number >= 1) weeks.set(week.key, week);
+    });
+    return [...weeks.values()].sort((a, b) => b.number - a.number);
+  }, [activities, currentCompetitionWeek.key]);
+
+  const selectedRankingWeek = useMemo(
+    () => rankingWeeks.find((week) => week.key === rankingWeekKey) || currentCompetitionWeek,
+    [rankingWeeks, rankingWeekKey, currentCompetitionWeek.key]
+  );
+
   const weeklyParticipants = useMemo(() => {
-    const currentWeekRows = activities.filter((activity) => getCompetitionWeek(activity.date).key === currentWeekKey);
-    return aggregateByAgent(currentWeekRows)
+    const selectedWeekRows = activities.filter((activity) => getCompetitionWeek(activity.date).key === rankingWeekKey);
+    return aggregateByAgent(selectedWeekRows)
       .sort((a, b) => b.totalPoints - a.totalPoints || a.agent.localeCompare(b.agent));
-  }, [activities, currentWeekKey]);
+  }, [activities, rankingWeekKey]);
 
   const weeklyResults = useMemo(() => {
     return weeklyParticipants
@@ -343,10 +360,53 @@ function AgentForm() {
         </aside>
       </form>
 
+      <section className="panel public-standings-card ranking-week-card">
+        <div className="ranking-week-control">
+          <div>
+            <p className="eyebrow">Ranking History</p>
+            <h3>View Rankings by Week</h3>
+            <p className="muted">Select the current week or any previous week with activity submissions.</p>
+          </div>
+          <label>View Week
+            <select value={rankingWeekKey} onChange={(e) => setRankingWeekKey(e.target.value)}>
+              {rankingWeeks.map((week) => (
+                <option key={week.key} value={week.key}>{week.label}: {week.dateRange}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section className="panel public-standings-card points-board-card">
+        <p className="eyebrow">Points-Based Ranking</p>
+        <h3>Weekly Points Leaderboard — {selectedRankingWeek.label}</h3>
+        <p className="muted">{selectedRankingWeek.dateRange} • Ranked by total activity points.</p>
+        {standingsError && <div className="error">{standingsError}</div>}
+        <div className="points-scoreboard">
+          {weeklyParticipants.map((agent, index) => {
+            const tier = getRewardTier(agent.totalPoints, agent.hasDiamondRequirement);
+            const displayTier = tier.lockedDiamond ? "Diamond Locked" : tier.label;
+            const levelClass = tier.lockedDiamond ? "locked" : tier.tier;
+            return (
+              <div className={`points-row level-${levelClass}`} key={agent.agent}>
+                <div className="points-rank">#{index + 1}</div>
+                <div className="points-agent">
+                  <strong>{agent.agent}</strong>
+                  <span className={`level-chip level-${levelClass}`}>{getTierIcon(tier)} {displayTier}</span>
+                </div>
+                <div className="points-total"><strong>{agent.totalPoints}</strong><span>points</span></div>
+              </div>
+            );
+          })}
+          {!weeklyParticipants.length && !standingsError && <p className="muted">No activity submissions for this selected week.</p>}
+        </div>
+        {!!weeklyParticipants.length && <p className="scoreboard-note">Ranking is based on highest total weekly points.</p>}
+      </section>
+
       <section className="panel public-standings-card results-board-card">
         <p className="eyebrow">Results-Based Ranking</p>
-        <h3>Weekly Scoreboard</h3>
-        <p className="muted">Only agents with at least one Presentation, BYB / Table Top, Coded Recruit, or Closed Case appear here.</p>
+        <h3>Weekly Scoreboard — {selectedRankingWeek.label}</h3>
+        <p className="muted">{selectedRankingWeek.dateRange} • Only agents with at least one Presentation, BYB / Table Top, Coded Recruit, or Closed Case appear here.</p>
         {standingsError && <div className="error">{standingsError}</div>}
         <div className="results-scoreboard">
           {weeklyResults.map((agent, index) => (
@@ -361,7 +421,7 @@ function AgentForm() {
               <div className="result-metric result-highlight"><span>Closed Cases</span><strong>{agent.closedCases}</strong></div>
             </div>
           ))}
-          {!weeklyResults.length && !standingsError && <p className="muted">No presentations, BYB / Table Tops, coded recruits, or closed cases have been submitted yet this week.</p>}
+          {!weeklyResults.length && !standingsError && <p className="muted">No presentations, BYB / Table Tops, coded recruits, or closed cases were submitted for this selected week.</p>}
         </div>
         {!!weeklyResults.length && (
           <p className="scoreboard-note">Ranked by Closed Cases, then Coded Recruits, Presentations, and BYB / Table Tops.</p>
